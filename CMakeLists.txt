@@ -11,7 +11,8 @@ include(FetchContent)
 FetchContent_Declare(
     raylib
     GIT_REPOSITORY https://github.com/raysan5/raylib.git
-    GIT_TAG 5.5)
+    GIT_TAG 5.5
+    GIT_PROGRESS ON)
 
 set(STEAMWORKS_SDK_ZIP ${CMAKE_SOURCE_DIR}/steamworks_sdk_162.zip)
 set(STEAM_APPID ${CMAKE_SOURCE_DIR}/steam_appid.txt)
@@ -20,7 +21,8 @@ set(CAULK_BUILD_TEST OFF)
 FetchContent_Declare(
     caulk
     GIT_REPOSITORY https://github.com/Schwungus/caulk.git
-    GIT_TAG master) # TODO: pin to a specific version
+    GIT_TAG master # TODO: pin to a specific version
+    GIT_PROGRESS ON)
 
 FetchContent_MakeAvailable(raylib caulk)
 
