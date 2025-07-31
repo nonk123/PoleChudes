@@ -26,7 +26,10 @@ static void loadAssets() {
 	background = LoadTexture(ROOT "fon_pole.png");
 	ved[0] = LoadTexture(ROOT "ved1.PNG");
 	ved[1] = LoadTexture(ROOT "ved2.PNG");
+
 	font = LoadFont(ROOT "fnt/dos.ttf");
+	font.baseSize = 32;
+	SetTextureFilter(font.texture, TEXTURE_FILTER_POINT);
 
 	disclaimers[0] = LoadTexture(ROOT "discl1.png");
 	disclaimers[1] = LoadTexture(ROOT "discl2.png");
