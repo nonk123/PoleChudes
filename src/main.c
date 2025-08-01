@@ -6,12 +6,12 @@
 #include "caulk.h"
 #include "raylib.h"
 
+#include "net.h"
 #include "text.h"
 #include "utils.h"
 
-bool quit = false, quitOnEsc = true, caulkInit = false;
+bool quit = false, caulkInit = false;
 bool vedaet = false;
-bool weGucci = false, weOnline = false; // networking...
 
 Font font;
 static Texture2D background, ved[2];
@@ -103,8 +103,10 @@ int main(int argc, char* argv[]) {
 		printf("Caulk failed to init!!! SHIT!!!!!!!\n");
 
 	loadAssets();
+	netInit();
 
 	while (!quit && !WindowShouldClose()) {
+		getLobbies();
 		caulk_Dispatch();
 
 		if (curDisclaimer != NULL) {
@@ -112,7 +114,12 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		if (quitOnEsc && IsKeyDown(KEY_ESCAPE))
+		if (IsKeyPressed(KEY_H))
+			hostLobby("test");
+		if (IsKeyPressed(KEY_J))
+			joinLobby(0);
+
+		if (IsKeyPressed(KEY_Q))
 			quit = true;
 		if (IsKeyPressed(KEY_V)) // debug....
 			vedaet = !vedaet;
@@ -124,8 +131,21 @@ int main(int argc, char* argv[]) {
 
 		DrawTexture(background, 0, 0, WHITE);
 		DrawTexture(ved[vedaet ? (int)(GetTime() * 5.0f) % 2 : 0], 488, 329, WHITE);
-		if (!weOnline)
-			writeLine(0, "bitch, you're OFFLINE");
+
+		char buf[512] = {0};
+		if (weOnline()) {
+			sprintf(buf, "%d players", (int)getPlayerCount());
+			writeLine(0, buf);
+		} else {
+			sprintf(buf, "%d lobbies", (int)getLobbyCount());
+			writeLine(0, buf);
+			writeLine(1, "J join");
+			writeLine(2, "H create lobby");
+		}
+
+		if (weOnline() && IsKeyPressed(KEY_ESCAPE)) {
+			quitLobby();
+		}
 
 		EndMode2D();
 		EndDrawing();
