@@ -92,26 +92,33 @@ static void parseArgs(int argc, char* argv[]) {
 
 static void menu() {
 	char buf[512] = {0};
-	if (weOnline()) {
-		clearLines();
-		snprintf(buf, LENGTH(buf), "%d players", (int)getPlayerCount());
-		setLine(0, buf);
-		setLine(1, "SPACE to start");
+	clearLines();
 
-		if (weMaster() && IsKeyPressed(KEY_SPACE))
-			gameStart();
-	} else {
-		clearLines();
-		snprintf(buf, LENGTH(buf), "%d lobbies", (int)getLobbyCount());
+	if (!weOnline()) {
+		const int count = getLobbyCount();
+		snprintf(buf, LENGTH(buf), "%d %s", count, (count == 1 ? "lobby" : "lobbies"));
 		setLine(0, buf);
-		setLine(1, "J join");
-		setLine(2, "H create lobby");
+
+		vedaem(1.0, "J - join, H - create lobby");
 
 		if (IsKeyPressed(KEY_H))
 			hostLobby("test");
 		if (IsKeyPressed(KEY_J))
 			joinLobby(0);
+
+		return;
 	}
+
+	const int count = getPlayerCount();
+	snprintf(buf, LENGTH(buf), "%d %s", count, (count == 1 ? "player" : "players"));
+	setLine(0, buf);
+
+	if (getPlayerCount() > 1) {
+		vedaem(1.0, "SPACE to start");
+		if (weMaster() && IsKeyPressed(KEY_SPACE))
+			gameStart();
+	} else
+		vedaem(1.0, "Waiting for players...");
 }
 
 int main(int argc, char* argv[]) {
@@ -144,8 +151,6 @@ int main(int argc, char* argv[]) {
 
 		if (IsKeyPressed(KEY_Q))
 			quit = true;
-		if (IsKeyPressed(KEY_V)) // debug....
-			setVedaet(!isVedaet());
 
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
@@ -153,14 +158,15 @@ int main(int argc, char* argv[]) {
 		BeginMode2D(camera());
 
 		DrawTexture(background, 0, 0, WHITE);
-		DrawTexture(ved[isVedaet() ? (int)(GetTime() * 5.0f) % 2 : 0], 488, 329, WHITE);
+		DrawTexture(ved[isVedaet() ? (int)(GetTime() * 5.0f) % 2 : 0], VEDA_WIDTH, VEDA_Y, WHITE);
 
-		if (weOnline() && IsKeyPressed(KEY_ESCAPE)) {
+		if (weOnline() && IsKeyPressed(KEY_ESCAPE))
 			quitLobby();
-		}
+		if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_SPACE))
+			stopVeda();
 
 		gameUpdate();
-		drawTextLines();
+		textUpdate();
 
 		EndMode2D();
 		EndDrawing();

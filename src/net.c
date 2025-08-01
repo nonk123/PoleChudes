@@ -3,6 +3,7 @@
 
 #include "game.h"
 #include "net.h"
+#include "text.h"
 
 #define REFRESH_RATE (5.0)
 #define SECRET_KEY "PoleChudes"
@@ -66,6 +67,7 @@ size_t getLobbyCount() {
 }
 
 void quitLobby() {
+	stopVeda();
 	if (curLobby)
 		caulk_SteamMatchmaking_LeaveLobby(curLobby);
 	curLobby = 0;

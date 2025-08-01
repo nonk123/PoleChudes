@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,37 +14,73 @@
 #include "utils.h"
 
 enum {
-	St_Null = 0,
+	St_Null,
 	St_Welcome,
 	St_Guess,
 };
 
 enum {
-	Msg_Update,
+	Msg_History,
+	Msg_Heartbeat,
 };
 
-static bool started = false;
-static int states[MAX_PLAYERS] = {0};
-static float transTimer = 0.0;
+struct History {
+	struct History* previous;
+	uint8_t player, transition;
+};
+
+static int started = 0;
+
+#define HIST_MAX (2048)
+static size_t histCounter = 0;
+static struct History *hist = NULL, histMem[HIST_MAX] = {0};
+static void pushHist();
 
 static void receiveMsg(void* cbData) {
-	static char buf[4096] = {0};
-	size_t size = caulk_SteamMatchmaking_GetLobbyChatEntry(
+	static uint8_t buf[4096] = {0};
+	size_t packetSize = caulk_SteamMatchmaking_GetLobbyChatEntry(
 	    getCurLobby(), ((LobbyChatMsg_t*)cbData)->m_iChatID, NULL, buf, LENGTH(buf), NULL
 	);
 
-	if (size < 2)
+	if (packetSize < 3 || packetSize > LENGTH(buf))
 		return;
-	const char* rawData = buf + 2;
 
-	started = true; // ! important
+	const uint8_t msg = buf[0];
+	uint16_t sizePayload = buf[1] | (buf[2] << 8);
+#ifdef __BIG_ENDIAN__
+	sizePayload = (sizePayload >> 8) | (sizePayload << 8);
+#endif
+	const uint8_t* rawData = buf + 3;
 
-	switch (*(uint16_t*)buf) {
-	case Msg_Update:
+	switch (msg) {
+	case Msg_History:
 		if (weMaster())
 			break;
-		for (size_t i = 0; i < MAX_PLAYERS; i++)
-			states[i] = ((int*)rawData)[i];
+
+		const size_t netHistCount = sizePayload / 2;
+
+		struct History* counter = hist;
+		size_t ourHistCount = 0;
+		while (counter != NULL) {
+			ourHistCount++;
+			counter = counter->previous;
+		}
+
+		int add = netHistCount - ourHistCount;
+		if (add <= 0)
+			break;
+
+		const uint8_t* reverse = rawData + (2 * add - 1);
+		while (add-- > 0) {
+			pushHist();
+			hist->transition = *reverse--;
+			hist->player = *reverse--;
+		}
+
+		break;
+	case Msg_Heartbeat:
+		printf("BISH!!!\n");
+		started = 60;
 		break;
 	default:
 		break;
@@ -52,93 +89,168 @@ static void receiveMsg(void* cbData) {
 
 void gameInit() {
 	gameReset();
-	transTimer = GetTime();
 	caulk_Register(LobbyChatMsg_t_iCallback, receiveMsg);
 }
 
-void gameReset() {
-	for (size_t i = 0; i < MAX_PLAYERS; i++)
-		states[i] = St_Null;
-	started = false;
+static void sendMessage(uint8_t type, const char* data, size_t size) {
+	static char buf[1024] = {0};
+	if (size + 3 >= LENGTH(buf)) {
+		printf("HUGE CHUNKUS MESSAGE IGNORED!!!!\n");
+		return;
+	}
+
+	if (data == NULL)
+		size = 0;
+	else
+		memcpy(buf + 3, data, size);
+
+	const uint16_t sizePayload = size;
+#ifdef __BIG_ENDIAN__
+	sizePayload = (sizePayload >> 8) | (sizePayload << 8);
+#endif
+	((uint8_t*)buf)[0] = type;
+	((uint8_t*)buf)[1] = (uint8_t)((sizePayload & 0x00FF) >> 0);
+	((uint8_t*)buf)[2] = (uint8_t)((sizePayload & 0xFF00) >> 8);
+
+	caulk_SteamMatchmaking_SendLobbyChatMsg(getCurLobby(), buf, 3 + size);
 }
 
-static void updateGameState() {
+static void sendGameState() {
+	if (!weMaster())
+		return;
+
 	static char buf[512] = {0};
-	*((uint16_t*)buf) = Msg_Update;
-	memcpy(buf + 2, states, MAX_PLAYERS * sizeof(*states));
-	caulk_SteamMatchmaking_SendLobbyChatMsg(getCurLobby(), buf, 2 + MAX_PLAYERS * sizeof(*states));
+	char* ptr = buf;
+
+	struct History* cur = hist;
+	size_t count = 0;
+
+	while (cur != NULL) {
+		*ptr++ = cur->player;
+		*ptr++ = cur->transition;
+		cur = cur->previous;
+		count++;
+	}
+
+	sendMessage(Msg_History, buf, (size_t)(2 * count));
+}
+
+static void sendHeartbeat() {
+	if (weMaster())
+		sendMessage(Msg_Heartbeat, NULL, 0);
+	else
+		started--;
 }
 
 #define Trans(_from, _to) if (from == (_from) && to == (_to))
 
-static int runStateTransition(int player, int from, int to) {
-	static char buf[LINE_MAX] = {0};
-	setVedaet(false);
-
-	// printf("i=%d f=%d t=%d\n", player, from, to);
+static uint8_t runStateTransition(int player, int from, int to) {
+	static char buf[VEDA_MAX] = {0};
 
 	Trans(St_Null, St_Welcome) {
 		CSteamID id = caulk_SteamMatchmaking_GetLobbyMemberByIndex(getCurLobby(), player);
 		if (!id)
-			return St_Null;
+			goto noop;
 		const char* name = caulk_SteamMatchmaking_GetLobbyMemberData(getCurLobby(), id, "name");
 
 		clearLines();
 		snprintf(buf, LENGTH(buf), "Welcome, %s!", name);
-		setLine(0, buf);
+		vedaem(2.0, buf);
 
-		transTimer += 3.0;
-		setVedaet(true);
 		return St_Guess;
 	}
 
 	Trans(St_Welcome, St_Guess) {
 		clearLines();
-		setLine(0, "That's all for now");
-		transTimer += 5.0;
+		vedaem(2.0, "That's all for now");
 		return St_Guess;
 	}
 
+	Trans(St_Guess, St_Guess) {
+		if (!GetRandomValue(0, 60 * 3 - 1))
+			vedaem(1.2, "Ahem");
+		return St_Guess;
+	}
+
+noop:
 	return St_Null;
 }
 
 #undef Trans
 
-static void processStateUpdates() {
-	static int old[MAX_PLAYERS] = {0}, transitions[MAX_PLAYERS] = {0};
-
-	const float time = GetTime();
-	if (transTimer - time > 1e-5)
+static void pushHist() {
+	if (histCounter == HIST_MAX) {
+		printf("REACHED HISTORY LIMIT; CATCHING ON FIRE **NOW**!!!!\n");
 		return;
-	transTimer = time;
-
-	for (size_t i = 0; i < getPlayerCount(); i++) {
-		if (transitions[i] == St_Null) {
-			transitions[i] = runStateTransition(i, old[i], states[i]);
-			return;
-		}
 	}
 
+	struct History* next = &histMem[histCounter++];
+	next->previous = hist;
+	hist = next;
+}
+
+static int roundRobin = 0;
+static void tickStateMachine() {
+	if (isVedaet())
+		return;
+
+	size_t playerIdx = roundRobin % getPlayerCount();
+	uint8_t from = St_Null, to = St_Null, transition = St_Null;
+
+	struct History* ptr = hist;
+	for (; ptr != NULL; ptr = ptr->previous)
+		if (ptr->player == playerIdx) {
+			to = ptr->transition;
+			ptr = ptr->previous;
+			break;
+		}
+	for (; ptr != NULL; ptr = ptr->previous)
+		if (ptr->player == playerIdx) {
+			from = ptr->transition;
+			break;
+		}
+
+	if (to != St_Null)
+		transition = runStateTransition(playerIdx, from, to);
+
+	// FIXME: probably the game-ending scenario?
+	if (transition != St_Null) {
+		pushHist();
+		hist->player = playerIdx;
+		hist->transition = transition;
+		roundRobin++;
+	}
+}
+
+void gameReset() {
+	started = 0;
+	roundRobin = 0;
+	histCounter = 0;
+	hist = NULL;
+
+	for (size_t i = 0; i < HIST_MAX; i++)
+		histMem[i].previous = NULL;
+
 	for (size_t i = 0; i < getPlayerCount(); i++) {
-		old[i] = states[i];
-		states[i] = transitions[i];
-		transitions[i] = St_Null;
+		pushHist();
+		hist->player = i;
+		hist->transition = St_Welcome;
 	}
 }
 
 void gameStart() {
-	for (size_t i = 0; i < getPlayerCount(); i++)
-		states[i] = St_Welcome;
-	started = true;
-	processStateUpdates();
+	gameReset();
+	started = 1;
 }
 
 void gameUpdate() {
-	if (started && weMaster())
-		updateGameState();
-	processStateUpdates();
+	sendGameState();
+	if (started) {
+		tickStateMachine();
+		sendHeartbeat();
+	}
 }
 
 bool weStarted() {
-	return started;
+	return started > 0;
 }

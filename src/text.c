@@ -10,6 +10,9 @@ extern Font font;
 
 static char lines[MAX_LINES][LINE_MAX] = {0};
 
+static float vedaUntil = 0.0;
+static char veda[VEDA_MAX] = {0};
+
 void setLine(int line, const char* text) {
 	if (line < 0 || line >= MAX_LINES)
 		return;
@@ -24,7 +27,35 @@ void clearLines() {
 		setLine(i, "");
 }
 
-void drawTextLines() {
+void textUpdate() {
+	if (GetTime() >= vedaUntil)
+		stopVeda();
+
+	const int frame = 3;
+	DrawRectangle(0, VEDA_Y, VEDA_WIDTH, VEDA_HEIGHT, BLACK);
+	DrawRectangle(frame, VEDA_Y + frame, VEDA_WIDTH - 2 * frame + 1, VEDA_HEIGHT - 2 * frame, RAYWHITE);
+
+	const float vedaHeight = 16.0, vedaWidth = 10.0, margin = 2.0;
+	const int vedaLen = strlen(veda), reserved = 4, colMax = 24;
+	int line = 0, col = 0;
+
+	for (size_t i = 0; i < vedaLen; i++) {
+		if (veda[i] == ' ') {
+			if (colMax - col >= reserved)
+				col++;
+			else {
+				line++;
+				col = 0;
+			}
+		} else {
+			Vector2 pos;
+			pos.x = frame + margin + col * vedaWidth;
+			pos.y = VEDA_Y + frame + margin + line * (vedaHeight + 2.0);
+			DrawTextCodepoint(font, veda[i], pos, vedaHeight, BLACK);
+			col++;
+		}
+	}
+
 	for (size_t i = 0; i < MAX_LINES; i++) {
 		const char* text = lines[i];
 		const int y = 15 + i * (CELL_SIZE - 1);
@@ -43,12 +74,18 @@ void drawTextLines() {
 	}
 }
 
-static bool vedaet = false;
-
 bool isVedaet() {
-	return vedaet;
+	return veda[0] != '\0';
 }
 
-void setVedaet(bool value) {
-	vedaet = value;
+void stopVeda() {
+	veda[0] = '\0';
+	vedaUntil = 0.0;
+}
+
+void vedaem(float duration, const char* text) {
+	const size_t len = strlen(text);
+	strncpy(veda, text, VEDA_MAX - 1);
+	veda[len >= VEDA_MAX - 1 ? VEDA_MAX - 1 : len] = '\0';
+	vedaUntil = GetTime() + duration;
 }
