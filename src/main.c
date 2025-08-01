@@ -81,7 +81,7 @@ static void parseArgs(int argc, char* argv[]) {
 	while (argc > 0) {
 		if (!strcmp(CUR_ARG, "--nozoom"))
 			zoom = 1;
-		if (!strcmp(CUR_ARG, "--nodisclaimers"))
+		else if (!strcmp(CUR_ARG, "--nodisclaimers"))
 			showDisclaimers = false;
 		NEXT_ARG;
 	}

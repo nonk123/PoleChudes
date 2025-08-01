@@ -7,7 +7,7 @@
     "cmake.generator": "Ninja",
     "cmake.exportCompileCommandsFile": true,
     "cmake.debugConfig": {
-        "args": ["--nodisclaimers"]
+        "args": ["--nodisclaimers", "--nozoom"]
     },
     "files.exclude": {
         ".cache": true

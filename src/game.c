@@ -27,7 +27,7 @@ static int states[MAX_PLAYERS] = {0};
 static float transTimer = 0.0;
 
 static void receiveMsg(void* cbData) {
-	static char buf[8192] = {0};
+	static char buf[4096] = {0};
 	size_t size = caulk_SteamMatchmaking_GetLobbyChatEntry(
 	    getCurLobby(), ((LobbyChatMsg_t*)cbData)->m_iChatID, NULL, buf, LENGTH(buf), NULL
 	);
@@ -35,10 +35,13 @@ static void receiveMsg(void* cbData) {
 	if (size < 2)
 		return;
 	const char* rawData = buf + 2;
-	started = true;
+
+	started = true; // ! important
 
 	switch (*(uint16_t*)buf) {
 	case Msg_Update:
+		if (weMaster())
+			break;
 		for (size_t i = 0; i < MAX_PLAYERS; i++)
 			states[i] = ((int*)rawData)[i];
 		break;
@@ -54,16 +57,15 @@ void gameInit() {
 }
 
 void gameReset() {
-	started = false;
 	for (size_t i = 0; i < MAX_PLAYERS; i++)
 		states[i] = St_Null;
+	started = false;
 }
 
 static void updateGameState() {
 	static char buf[512] = {0};
 	*((uint16_t*)buf) = Msg_Update;
 	memcpy(buf + 2, states, MAX_PLAYERS * sizeof(*states));
-
 	caulk_SteamMatchmaking_SendLobbyChatMsg(getCurLobby(), buf, 2 + MAX_PLAYERS * sizeof(*states));
 }
 

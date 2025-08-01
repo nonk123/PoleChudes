@@ -4,7 +4,7 @@
 #include "game.h"
 #include "net.h"
 
-#define REFRESH_RATE (8.0)
+#define REFRESH_RATE (5.0)
 #define SECRET_KEY "PoleChudes"
 #define SECRET_VALUE "Baraban!!!"
 
