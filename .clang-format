@@ -11,6 +11,6 @@ AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterReturnType: None
-IndentCaseLabels: true
+IndentCaseLabels: false
 AlignAfterOpenBracket: BlockIndent
 SortIncludes: CaseSensitive

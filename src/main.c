@@ -6,12 +6,12 @@
 #include "caulk.h"
 #include "raylib.h"
 
+#include "game.h"
 #include "net.h"
 #include "text.h"
 #include "utils.h"
 
 bool quit = false, caulkInit = false;
-bool vedaet = false;
 
 Font font;
 static Texture2D background, ved[2];
@@ -90,6 +90,30 @@ static void parseArgs(int argc, char* argv[]) {
 #undef NEXT_ARG
 }
 
+static void menu() {
+	char buf[512] = {0};
+	if (weOnline()) {
+		clearLines();
+		snprintf(buf, LENGTH(buf), "%d players", (int)getPlayerCount());
+		setLine(0, buf);
+		setLine(1, "SPACE to start");
+
+		if (weMaster() && IsKeyPressed(KEY_SPACE))
+			gameStart();
+	} else {
+		clearLines();
+		snprintf(buf, LENGTH(buf), "%d lobbies", (int)getLobbyCount());
+		setLine(0, buf);
+		setLine(1, "J join");
+		setLine(2, "H create lobby");
+
+		if (IsKeyPressed(KEY_H))
+			hostLobby("test");
+		if (IsKeyPressed(KEY_J))
+			joinLobby(0);
+	}
+}
+
 int main(int argc, char* argv[]) {
 	parseArgs(argc, argv);
 
@@ -104,6 +128,7 @@ int main(int argc, char* argv[]) {
 
 	loadAssets();
 	netInit();
+	gameInit();
 
 	while (!quit && !WindowShouldClose()) {
 		getLobbies();
@@ -114,15 +139,13 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		if (IsKeyPressed(KEY_H))
-			hostLobby("test");
-		if (IsKeyPressed(KEY_J))
-			joinLobby(0);
+		if (!weStarted())
+			menu();
 
 		if (IsKeyPressed(KEY_Q))
 			quit = true;
 		if (IsKeyPressed(KEY_V)) // debug....
-			vedaet = !vedaet;
+			setVedaet(!isVedaet());
 
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
@@ -130,22 +153,14 @@ int main(int argc, char* argv[]) {
 		BeginMode2D(camera());
 
 		DrawTexture(background, 0, 0, WHITE);
-		DrawTexture(ved[vedaet ? (int)(GetTime() * 5.0f) % 2 : 0], 488, 329, WHITE);
-
-		char buf[512] = {0};
-		if (weOnline()) {
-			sprintf(buf, "%d players", (int)getPlayerCount());
-			writeLine(0, buf);
-		} else {
-			sprintf(buf, "%d lobbies", (int)getLobbyCount());
-			writeLine(0, buf);
-			writeLine(1, "J join");
-			writeLine(2, "H create lobby");
-		}
+		DrawTexture(ved[isVedaet() ? (int)(GetTime() * 5.0f) % 2 : 0], 488, 329, WHITE);
 
 		if (weOnline() && IsKeyPressed(KEY_ESCAPE)) {
 			quitLobby();
 		}
+
+		gameUpdate();
+		drawTextLines();
 
 		EndMode2D();
 		EndDrawing();
