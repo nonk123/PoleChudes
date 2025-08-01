@@ -21,6 +21,15 @@ static float disclElapsed = 0.0f;
 static bool showDisclaimers = true;
 static Texture2D disclaimers[2], *curDisclaimer = NULL;
 
+static void killAssets() {
+	UnloadFont(font);
+	UnloadTexture(background);
+	UnloadTexture(ved[0]);
+	UnloadTexture(ved[1]);
+	UnloadTexture(disclaimers[0]);
+	UnloadTexture(disclaimers[1]);
+}
+
 static void loadAssets() {
 #define ROOT "assets/"
 	background = LoadTexture(ROOT "fon_pole.png");
@@ -31,10 +40,11 @@ static void loadAssets() {
 	font.baseSize = 32;
 	SetTextureFilter(font.texture, TEXTURE_FILTER_POINT);
 
-	disclaimers[0] = LoadTexture(ROOT "discl1.png");
-	disclaimers[1] = LoadTexture(ROOT "discl2.png");
-	if (showDisclaimers)
+	if (showDisclaimers) {
+		disclaimers[0] = LoadTexture(ROOT "discl1.png");
+		disclaimers[1] = LoadTexture(ROOT "discl2.png");
 		curDisclaimer = &disclaimers[0];
+	}
 #undef ROOT
 }
 
@@ -90,35 +100,43 @@ static void parseArgs(int argc, char* argv[]) {
 #undef NEXT_ARG
 }
 
-static void menu() {
+static void menuOnline() {
 	char buf[512] = {0};
 	clearLines();
-
-	if (!weOnline()) {
-		const int count = getLobbyCount();
-		snprintf(buf, LENGTH(buf), "%d %s", count, (count == 1 ? "lobby" : "lobbies"));
-		setLine(0, buf);
-
-		vedaem(1.0, "J - join, H - create lobby");
-
-		if (IsKeyPressed(KEY_H))
-			hostLobby("test");
-		if (IsKeyPressed(KEY_J))
-			joinLobby(0);
-
-		return;
-	}
 
 	const int count = getPlayerCount();
 	snprintf(buf, LENGTH(buf), "%d %s", count, (count == 1 ? "player" : "players"));
 	setLine(0, buf);
 
 	if (getPlayerCount() > 1) {
-		vedaem(1.0, "SPACE to start");
+		vedaem(1.0, weMaster() ? "SPACE to start" : "waiting for host to start");
 		if (weMaster() && IsKeyPressed(KEY_SPACE))
 			gameStart();
 	} else
 		vedaem(1.0, "Waiting for players...");
+}
+
+static void menuOffline() {
+	char buf[512] = {0};
+	clearLines();
+
+	const int count = getLobbyCount();
+	snprintf(buf, LENGTH(buf), "%d %s", count, (count == 1 ? "lobby" : "lobbies"));
+	setLine(0, buf);
+
+	vedaem(1.0, "J - join, H - create lobby");
+
+	if (IsKeyPressed(KEY_H))
+		hostLobby("test");
+	if (IsKeyPressed(KEY_J))
+		joinLobby(0);
+}
+
+static void menu() {
+	if (weOnline())
+		menuOnline();
+	else
+		menuOffline();
 }
 
 int main(int argc, char* argv[]) {
@@ -138,12 +156,17 @@ int main(int argc, char* argv[]) {
 	gameInit();
 
 	while (!quit && !WindowShouldClose()) {
+		BeginDrawing();
+		ClearBackground(RAYWHITE);
+
+		BeginMode2D(camera());
+
 		getLobbies();
 		caulk_Dispatch();
 
 		if (curDisclaimer != NULL) {
 			disclaim();
-			continue;
+			goto skip;
 		}
 
 		if (!weStarted())
@@ -151,11 +174,6 @@ int main(int argc, char* argv[]) {
 
 		if (IsKeyPressed(KEY_Q))
 			quit = true;
-
-		BeginDrawing();
-		ClearBackground(RAYWHITE);
-
-		BeginMode2D(camera());
 
 		DrawTexture(background, 0, 0, WHITE);
 		DrawTexture(ved[isVedaet() ? (int)(GetTime() * 5.0f) % 2 : 0], VEDA_WIDTH, VEDA_Y, WHITE);
@@ -168,9 +186,12 @@ int main(int argc, char* argv[]) {
 		gameUpdate();
 		textUpdate();
 
+	skip:
 		EndMode2D();
 		EndDrawing();
 	}
+
+	killAssets();
 
 	if (caulkInit)
 		caulk_Shutdown();
