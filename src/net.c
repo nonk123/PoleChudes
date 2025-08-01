@@ -25,7 +25,8 @@ static void onLobbyCreate(void* rawData) {
 
 static void onLobbyEnter(void* data) {
 	curLobby = ((LobbyEnter_t*)data)->m_ulSteamIDLobby;
-	caulk_SteamMatchmaking_SetLobbyData(curLobby, SECRET_KEY, SECRET_VALUE);
+	if (weMaster())
+		caulk_SteamMatchmaking_SetLobbyData(curLobby, SECRET_KEY, SECRET_VALUE);
 	caulk_SteamMatchmaking_SetLobbyMemberData(curLobby, "name", caulk_SteamFriends_GetPersonaName());
 }
 
