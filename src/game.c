@@ -25,17 +25,15 @@ enum {
 };
 
 struct Record {
-	struct Record *before, *after;
-	uint8_t params[4];
-	uint8_t player, transition;
+	int8_t player; // -1 means free history record
+	uint8_t transition, params[4];
 };
 
 static int started = 0;
 
 #define HIST_MAX (2048)
-static size_t histCounter = 0;
-static struct Record *fullHist = {0}, histMem[HIST_MAX] = {0}, *histPtr = {0};
-static void pushHist();
+static uint16_t histPos = 0;
+static struct Record hist[HIST_MAX] = {0}, *pushHist();
 
 static void receiveMsg(void* cbData) {
 	static uint8_t buf[4096] = {0};
@@ -59,25 +57,12 @@ static void receiveMsg(void* cbData) {
 			break;
 
 		const size_t netHistCount = sizePayload / 6;
-
-		struct Record* counter = fullHist;
-		size_t ourHistCount = 0;
-		while (counter != NULL) {
-			ourHistCount++;
-			counter = counter->before;
-		}
-
-		int add = netHistCount - ourHistCount;
-		if (add <= 0)
-			break;
-
-		const uint8_t* reverse = rawData + (6 * add - 1);
-		while (add-- > 0) {
-			pushHist();
-			for (int i = 3; i >= 0; i--)
-				fullHist->params[i] = *reverse--;
-			fullHist->transition = *reverse--;
-			fullHist->player = *reverse--;
+		const uint8_t* reverse = rawData + (sizePayload - 1);
+		for (size_t i = 0; i < netHistCount; i++) {
+			for (int j = 3; j >= 0; j--)
+				hist[i].params[j] = *reverse--;
+			hist[i].transition = *reverse--;
+			hist[i].player = *reverse--;
 		}
 
 		break;
@@ -123,16 +108,15 @@ static void sendGameState() {
 
 	static char buf[512] = {0};
 	char* ptr = buf;
-
-	struct Record* cur = fullHist;
 	size_t count = 0;
 
-	while (cur != NULL) {
-		*ptr++ = cur->player;
-		*ptr++ = cur->transition;
+	for (size_t i = 0; i <= histPos; i++) {
+		if (hist[i].player == -1)
+			break;
+		*ptr++ = hist[i].player;
+		*ptr++ = hist[i].transition;
 		for (int j = 0; j < 4; j++)
-			*ptr++ = ((char*)&cur->params)[j];
-		cur = cur->before;
+			*ptr++ = ((char*)&hist[i].params)[j];
 		count++;
 	}
 
@@ -189,22 +173,15 @@ static void transitionSlave(int player, int from, int to, const uint8_t* params)
 
 #undef Trans
 
-static void pushHist() {
-	if (histCounter == HIST_MAX) {
-		printf("REACHED HISTORY LIMIT; CATCHING ON FIRE **NOW**!!!!\n");
-		return;
-	}
+static struct Record* pushHist() {
+	for (size_t i = histPos; i < HIST_MAX; i++)
+		if (hist[i].player == -1) {
+			memset(hist[i].params, 0, LENGTH(hist[i].params));
+			return &hist[i];
+		}
 
-	struct Record* cur = &histMem[histCounter++];
-	memset(cur->params, 0, LENGTH(cur->params));
-	if (fullHist != NULL)
-		fullHist->after = cur;
-	cur->before = fullHist;
-	cur->after = NULL;
-	fullHist = cur;
-
-	if (histPtr == NULL)
-		histPtr = fullHist;
+	printf("REACHED HISTORY LIMIT; CATCHING ON FIRE **NOW**!!!!\n");
+	return NULL;
 }
 
 static int roundRobin = 0;
@@ -212,37 +189,45 @@ static void tickStateMachine() {
 	if (isVedaet())
 		return;
 
-	size_t playerIdx = roundRobin % getPlayerCount();
-	uint8_t from = St_Null, to = St_Null, transition = St_Null;
+	size_t player = roundRobin % getPlayerCount();
 	uint8_t params[4] = {0};
 
-	struct Record* ptr = histPtr;
-	for (; ptr != NULL; ptr = ptr->before)
-		if (ptr->player == playerIdx) {
-			to = ptr->transition;
-			memcpy(params, ptr->params, LENGTH(params));
-			ptr = ptr->before;
+	if (hist[histPos].player == -1) {
+		sendGameState();
+		return;
+	}
+
+	uint8_t from = St_Null, to = St_Null, transition = St_Null;
+
+	size_t backtrack = histPos;
+	while (backtrack >= 0)
+		if (hist[backtrack].player == player) {
+			to = hist[backtrack].transition;
+			memcpy(params, hist[backtrack].params, LENGTH(params));
+			backtrack--;
 			break;
-		}
-	for (; ptr != NULL; ptr = ptr->before)
-		if (ptr->player == playerIdx) {
-			from = ptr->transition;
+		} else
+			backtrack--;
+	while (backtrack >= 0)
+		if (hist[backtrack].player == player) {
+			from = hist[backtrack].transition;
 			break;
-		}
+		} else
+			backtrack--;
 
 	if (to != St_Null) {
 		if (weMaster())
-			transition = transitionMaster(playerIdx, from, to, params);
-		transitionSlave(playerIdx, from, to, params);
-		histPtr = histPtr->after;
+			transition = transitionMaster(player, from, to, params);
+		transitionSlave(player, from, to, params);
+		histPos++;
 	}
 
 	// FIXME: probably the game-ending scenario?
 	if (weMaster() && transition != St_Null) {
-		pushHist();
-		fullHist->player = playerIdx;
-		fullHist->transition = transition;
-		memcpy(fullHist->params, params, LENGTH(params));
+		struct Record* ptr = pushHist();
+		ptr->player = player;
+		ptr->transition = transition;
+		memcpy(ptr->params, params, LENGTH(params));
 		roundRobin++;
 		sendGameState();
 	}
@@ -251,16 +236,15 @@ static void tickStateMachine() {
 void gameReset() {
 	started = 0;
 	roundRobin = 0;
-	histCounter = 0;
-	fullHist = NULL;
+	histPos = 0;
 
 	for (size_t i = 0; i < HIST_MAX; i++)
-		histMem[i].before = histMem[i].after = NULL;
+		hist[i].player = -1;
 
 	for (size_t i = 0; i < getPlayerCount(); i++) {
-		pushHist();
-		fullHist->player = i;
-		fullHist->transition = St_Welcome;
+		struct Record* ptr = pushHist();
+		ptr->player = i;
+		ptr->transition = St_Welcome;
 	}
 }
 
