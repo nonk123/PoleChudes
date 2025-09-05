@@ -4,18 +4,16 @@
     "C_Cpp.intelliSenseEngine": "disabled",
     "clangd.enable": true,
     "clangd.enableCodeCompletion": true,
+    "clangd.arguments": ["--header-insertion=never"],
     "cmake.generator": "Ninja",
     "cmake.exportCompileCommandsFile": true,
     "cmake.debugConfig": {
-        "args": ["--nodisclaimers", "--nozoom"]
+        "args": ["--skip-intro"]
     },
     "files.exclude": {
         ".cache": true
     },
     "[c]": {
-        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
-    },
-    "[cpp]": {
         "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
     },
     "[cmake]": {
