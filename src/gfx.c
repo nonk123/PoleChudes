@@ -1,28 +1,19 @@
-#include <string.h>
-
 #include <S_tructures.h>
 
 #include "gfx.h"
+#include "util.h"
 
 static StTinyMap* map = NULL;
 
-#define PREFIX "assets/"
 Texture gfx(const char* name) {
-	static char fullPath[128] = {0};
-	memcpy(fullPath, PREFIX, sizeof(PREFIX));
-	memcpy(fullPath + sizeof(PREFIX) - 1, name, strlen(name));
-
-	StTinyKey hash = 5381, c; // djb2 from: http://www.cse.yorku.ca/~oz/hash.html
-	const char* ptr = fullPath;
-
-	while ((c = (uint8_t)*ptr++))
-		hash = (hash << 5) + hash + c;
+	name = asspath(name);
+	StTinyKey hash = djb2(name);
 
 	Texture* texPtr = NULL;
 	if ((texPtr = StMapGet(map, hash)) != NULL)
 		return *texPtr;
 
-	Texture tex = LoadTexture(fullPath);
+	Texture tex = LoadTexture(name);
 	StMapPut(map, hash, &tex, sizeof(tex));
 	return tex;
 }
