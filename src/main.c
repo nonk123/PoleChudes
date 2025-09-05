@@ -56,6 +56,7 @@ int main(int argc, char* argv[]) {
 		else if (IsKeyPressed(KEY_ESCAPE))
 			break;
 		EndDrawing();
+		NutPunch_Update();
 	}
 
 	gfxCleanup();
@@ -104,7 +105,7 @@ enum {
 	MN_SIZE,
 };
 
-static void goSingle(), goOnline(), fuckingExit(), findLobby(), hostLobby(), goHost();
+static void goSingle(), goOnline(), fuckingExit(), findLobby(), hostLobby(), joinLobby(), goHost();
 static void noop() {}
 
 #define OPTION_SIZE (64)
@@ -119,7 +120,7 @@ struct MenuOption menus[MN_SIZE][MAX_OPTIONS] = {
 	[MN_HOST] = {{"Players: FMT", noop}, {"Start!", goHost}},
 	[MN_JOIN] = {}, // populated after lobby list refresh
 };
-int menu = MN_MAIN, menuFrom[MN_SIZE] = {0};
+int menu = MN_MAIN, menuFrom[MN_SIZE] = {0}, options[MN_SIZE] = {0};
 
 static int numOptions() {
 	for (int i = 0; i < MAX_OPTIONS; i++)
@@ -143,10 +144,45 @@ static void puke(const char* text, int x, int y, int fs) {
 	DrawTextEx(font, text, v, fs, 0.f, WHITE);
 }
 
+#define MAGIC_KEY "PoleChudes"
+const int MAGIC_VALUE = 1337;
+
+static void maybeRefresh() {
+	const float refreshRate = 5.f;
+	static float timeSince = refreshRate;
+
+	timeSince += GetFrameTime();
+	if (timeSince < refreshRate || menu != MN_JOIN)
+		goto updateOptions;
+	timeSince = 0.f;
+
+	struct NutPunch_Filter filter = {0};
+	memcpy(filter.name, MAGIC_KEY, sizeof(filter.name));
+	memcpy(filter.value, &MAGIC_VALUE, sizeof(MAGIC_VALUE));
+	filter.comparison = 0;
+
+	NutPunch_SetServerAddr(NUTPUNCH_DEFAULT_SERVER);
+	NutPunch_FindLobbies(1, &filter);
+
+updateOptions:
+	int count = 0, i = 0;
+	const char** lobbies = NutPunch_LobbyList(&count);
+	for (; i < count; i++) {
+		strncpy(menus[MN_JOIN][i].display, lobbies[i], OPTION_SIZE);
+		menus[MN_JOIN][i].click = joinLobby;
+	}
+	if (!count) {
+		strncpy(menus[MN_JOIN][0].display, "Refreshing lobby list...", OPTION_SIZE);
+		menus[MN_JOIN][0].click = noop;
+		i = 1;
+	}
+	for (; i < MAX_OPTIONS; i++)
+		menus[MN_JOIN][i].click = NULL;
+}
+
 static void tickMainMenu() {
 	drawPole();
 
-	static int options[MN_SIZE] = {0};
 	if (IsKeyPressed(KEY_DOWN))
 		options[menu]++;
 	if (IsKeyPressed(KEY_UP))
@@ -164,12 +200,20 @@ static void tickMainMenu() {
 		else
 			menu = menuFrom[menu];
 	}
+	maybeRefresh();
 
 	int x = 120, sy = 120, fs = 32;
 	for (int i = 0; i < numOptions(); i++)
 		puke(menus[menu][i].display, x, sy + i * fs, fs);
 	if (numOptions())
 		puke(">", x - fs, sy + options[menu] * fs, fs);
+}
+
+static void joinLobby() {
+	const char* lobby = menus[MN_JOIN][options[MN_JOIN]].display;
+	NutPunch_SetServerAddr(NUTPUNCH_DEFAULT_SERVER);
+	NutPunch_Join(lobby);
+	setState(GSM_WAITING);
 }
 
 static void goSingle() {
@@ -189,6 +233,13 @@ static void hostLobby() {
 }
 
 static void goHost() {
+	static char random[8] = {0};
+	for (int i = 0; i < sizeof(random); i++)
+		random[i] = GetRandomValue('a', 'z');
+
+	NutPunch_SetServerAddr(NUTPUNCH_DEFAULT_SERVER);
+	NutPunch_Join(random);
+	NutPunch_Set(MAGIC_KEY, sizeof(MAGIC_VALUE), &MAGIC_VALUE);
 	setState(GSM_WAITING);
 }
 
