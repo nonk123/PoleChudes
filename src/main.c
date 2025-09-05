@@ -10,6 +10,11 @@
 
 static void tickIntro(), tickMainMenu();
 
+static bool gameRunning = true;
+static void fuckingExit() {
+	gameRunning = false;
+}
+
 enum {
 	GSM_INTRO,
 	GSM_MAIN_MENU,
@@ -31,7 +36,6 @@ static void setState(int newState) {
 	gameState = newState;
 }
 
-static bool gameRunning = true;
 int main(int argc, char* argv[]) {
 	bool playIntro = true;
 	for (int i = 1; i < argc; i++)
@@ -105,7 +109,7 @@ enum {
 	MN_SIZE,
 };
 
-static void goSingle(), goOnline(), fuckingExit(), findLobby(), hostLobby(), joinLobby(), goHost();
+static void goSingle(), goOnline(), findLobby(), hostLobby(), joinLobby(), goHost();
 static void noop() {}
 
 #define OPTION_SIZE (64)
@@ -241,8 +245,4 @@ static void goHost() {
 	NutPunch_Join(random);
 	NutPunch_Set(MAGIC_KEY, sizeof(MAGIC_VALUE), &MAGIC_VALUE);
 	setState(GSM_WAITING);
-}
-
-static void fuckingExit() {
-	gameRunning = false;
 }
