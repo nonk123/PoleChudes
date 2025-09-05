@@ -7,9 +7,6 @@
     "clangd.arguments": ["--header-insertion=never"],
     "cmake.generator": "Ninja",
     "cmake.exportCompileCommandsFile": true,
-    "cmake.debugConfig": {
-        "args": ["--skip-intro"]
-    },
     "files.exclude": {
         ".cache": true
     },
